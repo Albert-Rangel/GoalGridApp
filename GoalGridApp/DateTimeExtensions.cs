@@ -1,4 +1,4 @@
-﻿namespace GoalGridApp // Asegúrate de que este sea el namespace de tu proyecto
+﻿namespace GoalGridApp 
 {
     public static class DateTimeExtensions
     {

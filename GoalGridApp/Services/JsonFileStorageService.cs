@@ -12,7 +12,7 @@ namespace GoalGridApp.Services
             _filePath = Path.Combine(FileSystem.AppDataDirectory, "tasks.json");
         }
 
-        // Se cambió "WeeklyPlanner.DailyTask" por "DailyTask"
+        
         public async Task SaveTasksAsync(Dictionary<DateTime, List<DailyTask>> weeklyTasks)
         {
             var serializableData = new Dictionary<string, List<DailyTask>>();
@@ -25,7 +25,7 @@ namespace GoalGridApp.Services
             await File.WriteAllTextAsync(_filePath, jsonString);
         }
 
-        // Se cambió "WeeklyPlanner.DailyTask" por "DailyTask" en todo el método
+        
         public async Task<Dictionary<DateTime, List<DailyTask>>> LoadTasksAsync()
         {
             if (!File.Exists(_filePath))
