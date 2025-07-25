@@ -1,0 +1,90 @@
+﻿@page "/stats"
+@inject JsonFileStorageService StorageService
+
+<div class="stats-container">
+    <h3>Estadísticas Semanales</h3>
+
+    @if (isLoading)
+    {
+        <p>Cargando estadísticas...</p>
+    }
+    else
+    {
+        <div class="stat-card">
+            <h4>Tareas Completadas</h4>
+            <p class="stat-number">@completedThisWeek</p>
+            <small>en la semana actual</small>
+        </div>
+        <div class="stat-card">
+            <h4>Total de Tareas</h4>
+            <p class="stat-number">@totalTasksThisWeek</p>
+            <small>en la semana actual</small>
+        </div>
+    }
+</div>
+
+<div class="chart-container" style="margin-top: 2rem;">
+    <h4>Progreso General (Toda la historia)</h4>
+    @if (progressData != null && progressData.Any())
+    {
+        <RadzenChart>
+            <RadzenPieSeries Data="@progressData" CategoryProperty="Status" ValueProperty="Count" />
+        </RadzenChart>
+    }
+    else if (!isLoading)
+    {
+        <p>No hay datos para mostrar en el gráfico.</p>
+    }
+</div>
+
+@code {
+    private int completedThisWeek = 0;
+    private int totalTasksThisWeek = 0;
+    private bool isLoading = true;
+    private List<ChartData> progressData;
+
+    public class ChartData
+    {
+        public string Status { get; set; }
+        public int Count { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        await LoadAndProcessData();
+        isLoading = false;
+    }
+
+    private async Task LoadAndProcessData()
+    {
+        var allTasks = await StorageService.LoadTasksAsync() ?? new Dictionary<DateTime, List<DailyTask>>();
+        var tasksList = allTasks.Values.SelectMany(list => list).ToList();
+
+        var today = DateTime.Today;
+        var dayOfWeek = today.DayOfWeek == DayOfWeek.Sunday ? 6 : (int)today.DayOfWeek - 1;
+        var startOfWeek = today.AddDays(-dayOfWeek);
+        var endOfWeek = startOfWeek.AddDays(6);
+        var tasksThisWeek = tasksList
+            .Where(task => allTasks.Any(kvp => kvp.Value.Contains(task) && kvp.Key.Date >= startOfWeek && kvp.Key.Date <= endOfWeek));
+
+        completedThisWeek = tasksThisWeek.Count(task => task.IsCompleted);
+        totalTasksThisWeek = tasksThisWeek.Count();
+
+        int completedCount = tasksList.Count(t => t.IsCompleted);
+        int pendingCount = tasksList.Count(t => !t.IsCompleted);
+        double totalCount = completedCount + pendingCount;
+
+        progressData = new List<ChartData>();
+        if (completedCount > 0)
+        {
+            string label = $"Completadas ({((double)completedCount / totalCount).ToString("P0")})";
+            progressData.Add(new ChartData { Status = label, Count = completedCount });
+        }
+        if (pendingCount > 0)
+        {
+            string label = $"Pendientes ({((double)pendingCount / totalCount).ToString("P0")})";
+            progressData.Add(new ChartData { Status = label, Count = pendingCount });
+        }
+    }
+}

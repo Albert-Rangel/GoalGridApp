@@ -1,5 +1,74 @@
 ﻿@page "/"
+@inject JsonFileStorageService StorageService 
 
-<h1>Hello, world!</h1>
+<PageTitle>Inicio - GoalGrid</PageTitle> @* Opcional: añade un título de página *@
 
-Welcome to your new app.
+<h1 class="welcome-title">Bienvenido a GoalGrid</h1>
+
+<div class="day-column">
+    <div class="day-header">
+        <h4>Tareas para Hoy (@DateTime.Today.ToString("dd MMMM"))</h4>
+    </div>
+    <div class="tasks-list">
+        @if (TodayTasks != null && TodayTasks.Any()) @* <-- 3. Verificar si hay tareas *@
+        {
+            @foreach (var task in TodayTasks) @* <-- 3. Iterar sobre las tareas del día *@
+            {
+                <div class="task-item @(task.IsCompleted ? "completed" : "")">
+                    <input type="checkbox" @bind="task.IsCompleted" @bind:after="() => UpdateTaskStatus(task)" /> @* <-- 3. y 4. Bind y guardar cambios *@
+                    <span class="task-description">@task.Description</span>
+                    <button class="btn btn-danger btn-sm delete-task-btn" @onclick="(() => RemoveTask(task))">X</button> @* <-- Añadir botón de eliminar con lógica *@
+                </div>
+            }
+        }
+        else
+        {
+            <p class="no-tasks-message">No hay tareas para hoy.</p> @* Mensaje si no hay tareas *@
+        }
+    </div>
+    
+    @* ELIMINADO: Formulario para añadir tareas *@
+
+</div>
+
+@code {
+    private List<DailyTask> TodayTasks { get; set; } = new List<DailyTask>();
+    private Dictionary<DateTime, List<DailyTask>> AllTasks { get; set; } = new Dictionary<DateTime, List<DailyTask>>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Cargar todas las tareas
+        AllTasks = await StorageService.LoadTasksAsync();
+        if (AllTasks == null)
+        {
+            AllTasks = new Dictionary<DateTime, List<DailyTask>>();
+        }
+
+        // Obtener solo las tareas para el día de hoy
+        if (AllTasks.ContainsKey(DateTime.Today.Date))
+        {
+            TodayTasks = AllTasks[DateTime.Today.Date];
+        }
+        else
+        {
+            TodayTasks = new List<DailyTask>(); // Asegura que sea una lista vacía si no hay tareas para hoy
+            AllTasks[DateTime.Today.Date] = TodayTasks; // Añadir la entrada para hoy si no existe
+        }
+    }
+
+    // Método para actualizar el estado de una tarea y guardarlo
+    private async Task UpdateTaskStatus(DailyTask task)
+    {
+        await StorageService.SaveTasksAsync(AllTasks); // Guarda el diccionario completo
+    }
+
+    // Método para eliminar una tarea desde el Home
+    private async Task RemoveTask(DailyTask taskToRemove)
+    {
+        if (TodayTasks.Contains(taskToRemove))
+        {
+            TodayTasks.Remove(taskToRemove);
+            await StorageService.SaveTasksAsync(AllTasks); // Guarda los cambios
+        }
+    }
+}

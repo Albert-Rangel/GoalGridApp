@@ -1,6 +1,5 @@
 ﻿@page "/weeklyplanner"
-@inject GoalGridApp.Services.JsonFileStorageService StorageService 
-@using System.Globalization;
+@inject JsonFileStorageService StorageService
 
 <PageTitle>Planificador Semanal - GoalGrid</PageTitle>
 
@@ -18,14 +17,13 @@
         {
             <div class="day-column">
                 <div class="day-header">
-                    <h4>@day.Date.ToString("ddd d")</h4> @* Ej: Lun 15 *@
+                    <h4>@day.Date.ToString("ddd d")</h4>
                 </div>
                 <div class="tasks-list">
                     @foreach (var task in GetTasksForDay(day.Date))
                     {
                         <div class="task-item @(task.IsCompleted ? "completed" : "")">
-                           @*  <input type="checkbox" @bind="task.IsCompleted" />  *@
-                            <input type="checkbox" @bind="task.IsCompleted" @bind:after="(() => UpdateTaskStatus(task))" />
+                            <input type="checkbox" @bind="task.IsCompleted" @bind:after="() => UpdateTaskStatus(task)" />
                             <span class="task-description">@task.Description</span>
                             <button class="btn btn-danger btn-sm delete-task-btn" @onclick="(() => RemoveTask(day.Date, task))">X</button>
                         </div>
@@ -44,105 +42,53 @@
 </div>
 
 @code {
-    @using System.Globalization; // Puedes mantenerlo o quitarlo si no lo usas explícitamente para formatos
-    
-    public class DailyTask
-    {
-        // [JsonPropertyName("description")] // Puedes usar esto si quieres nombres específicos en el JSON, requiere using System.Text.Json.Serialization;
-        public string Description { get; set; }
-        // [JsonPropertyName("isCompleted")]
-        public bool IsCompleted { get; set; }
-        // [JsonPropertyName("category")]
-        public string Category { get; set; } = "General";
-
-        public DailyTask(string description)
-        {
-            Description = description;
-            IsCompleted = false;
-        }
-    }
-
-    // Almacenamiento de tareas (simulación en memoria por ahora)
     private Dictionary<DateTime, List<DailyTask>> WeeklyTasks { get; set; } = new Dictionary<DateTime, List<DailyTask>>();
-
-    // Propiedades para la semana actual
+    private Dictionary<DateTime, string> NewTaskDescription = new Dictionary<DateTime, string>();
     private DateTime CurrentDate { get; set; } = DateTime.Today;
-    private DateTime StartDate => CurrentDate.StartOfWeek(DayOfWeek.Monday); // Comienza la semana en Lunes
+    private DateTime StartDate => GetStartOfWeek(CurrentDate);
     private DateTime EndDate => StartDate.AddDays(6);
-
-    // Lista de los 7 días de la semana actual
     private List<(DateTime Date, DayOfWeek DayOfWeek)> DaysOfWeek { get; set; } = new List<(DateTime Date, DayOfWeek DayOfWeek)>();
 
-    // Diccionario para guardar la descripción de la nueva tarea por cada día
-    private Dictionary<DateTime, string> NewTaskDescription = new Dictionary<DateTime, string>();
-
-    // --- Métodos de ciclo de vida del componente ---
-
-    protected override async Task OnInitializedAsync() // ¡Importante: debe ser async Task!
+    protected override async Task OnInitializedAsync()
     {
-        // Cargar las tareas existentes del archivo JSON
         var loadedTasks = await StorageService.LoadTasksAsync();
-
-        // Inicializar WeeklyTasks con las tareas cargadas o un nuevo diccionario si no hay.
-        WeeklyTasks = loadedTasks ?? new Dictionary<DateTime, List<DailyTask>>();
-
-        // Asegurarse de que DaysOfWeek esté inicializado con las fechas correctas de la semana actual
-        // y que NewTaskDescription tenga entradas para todos los días de la semana actual.
-        InitializeWeekDisplay(); // Un nuevo método para inicializar solo la visualización de la semana
-        StateHasChanged();
-
+        if (loadedTasks != null)
+        {
+            WeeklyTasks = loadedTasks;
+        }
+        InitializeWeekDisplay();
     }
-    // Nuevo método para inicializar solo la estructura de DaysOfWeek y NewTaskDescription
+
     private void InitializeWeekDisplay()
     {
         DaysOfWeek.Clear();
-        NewTaskDescription.Clear();
-
+        var weekStart = StartDate;
         for (int i = 0; i < 7; i++)
         {
-            var date = StartDate.AddDays(i);
+            var date = weekStart.AddDays(i).Date;
             DaysOfWeek.Add((date, date.DayOfWeek));
             if (!NewTaskDescription.ContainsKey(date))
             {
-                NewTaskDescription[date] = ""; // Asegura que el input de nueva tarea exista para cada día
+                NewTaskDescription[date] = "";
             }
-            // Asegúrate de que WeeklyTasks tiene una lista para cada día, incluso si está vacía
-            if (!WeeklyTasks.ContainsKey(date.Date))
+            if (!WeeklyTasks.ContainsKey(date))
             {
-                WeeklyTasks[date.Date] = new List<DailyTask>();
+                WeeklyTasks[date] = new List<DailyTask>();
             }
         }
     }
 
-    // --- Métodos de navegación de semanas ---
-
-    private void InitializeWeek() // Vuelve a 'void' y elimina 'async'
-    {
-        DaysOfWeek.Clear();
-        NewTaskDescription.Clear();
-        WeeklyTasks.Clear();
-
-        for (int i = 0; i < 7; i++)
-        {
-            var date = StartDate.AddDays(i);
-            DaysOfWeek.Add((date, date.DayOfWeek));
-            NewTaskDescription[date] = "";
-            WeeklyTasks[date] = new List<DailyTask>(); // Inicializa una lista vacía para cada día
-        }
-    }
     private void PreviousWeek()
     {
         CurrentDate = CurrentDate.AddDays(-7);
-        InitializeWeekDisplay(); // Solo actualiza la visualización de la semana
+        InitializeWeekDisplay();
     }
 
     private void NextWeek()
     {
         CurrentDate = CurrentDate.AddDays(7);
-        InitializeWeekDisplay(); // Solo actualiza la visualización de la semana
+        InitializeWeekDisplay();
     }
-
-    // --- Métodos para gestionar tareas ---
 
     private List<DailyTask> GetTasksForDay(DateTime date)
     {
@@ -151,36 +97,28 @@
 
     private async Task AddTask(DateTime date)
     {
-        string description = NewTaskDescription[date];
+        string description = NewTaskDescription[date.Date];
         if (!string.IsNullOrWhiteSpace(description))
         {
-            var newTask = new DailyTask(description);
-
-            if (!WeeklyTasks.ContainsKey(date.Date))
-            {
-                WeeklyTasks[date.Date] = new List<DailyTask>();
-            }
+            var newTask = new DailyTask { Description = description, IsCompleted = false };
             WeeklyTasks[date.Date].Add(newTask);
-            NewTaskDescription[date] = ""; // Limpiar el input
+            NewTaskDescription[date.Date] = "";
 
-            await StorageService.SaveTasksAsync(WeeklyTasks); // <-- ¡Guardar en JSON!
+            await StorageService.SaveTasksAsync(WeeklyTasks);
         }
     }
 
-    private async Task HandleAddTask(KeyboardEventArgs e, DateTime date) // CAMBIAR A ASYNC Y Task
+    private async Task HandleAddTask(KeyboardEventArgs e, DateTime date)
     {
         if (e.Code == "Enter" || e.Code == "NumpadEnter")
         {
-            await AddTask(date); // Llamar al método asíncrono
+            await AddTask(date);
         }
     }
 
     private async Task UpdateTaskStatus(DailyTask task)
     {
-        // task.IsCompleted ya fue actualizado por @bind
-        // No necesitamos buscar la fecha, ya que el diccionario completo se guarda.
-        await StorageService.SaveTasksAsync(WeeklyTasks); // <-- ¡Guardar en JSON!
-        StateHasChanged(); // Forzar actualización de la UI
+        await StorageService.SaveTasksAsync(WeeklyTasks);
     }
 
     private async Task RemoveTask(DateTime date, DailyTask taskToRemove)
@@ -188,9 +126,14 @@
         if (WeeklyTasks.ContainsKey(date.Date))
         {
             WeeklyTasks[date.Date].Remove(taskToRemove);
-            await StorageService.SaveTasksAsync(WeeklyTasks); // <-- ¡Guardar en JSON!
+            await StorageService.SaveTasksAsync(WeeklyTasks);
         }
-        StateHasChanged(); // Forzar actualización de la UI
+    }
+
+    private DateTime GetStartOfWeek(DateTime date)
+    {
+        int diff = (7 + (date.DayOfWeek - DayOfWeek.Monday)) % 7;
+        return date.AddDays(-1 * diff).Date;
     }
 }
 
@@ -212,25 +155,8 @@
         align-items: center;
         margin-bottom: 20px;
         gap: 15px;
-        /* Hacemos que la navegación sea columna en pantallas pequeñas directamente */
-        flex-wrap: wrap; /* Permite que los elementos se envuelvan */
-        flex-direction: row; /* Por defecto */
+        flex-wrap: wrap;
     }
-
-        /* Ajuste para navegación en pantallas pequeñas (usando flex-wrap en lugar de media query) */
-        .weekly-navigation button, .weekly-navigation span {
-            flex-basis: auto; /* Permite que cada elemento decida su ancho */
-            min-width: 120px; /* Asegura un ancho mínimo para los botones/span */
-        }
-    @@media (max-width: 500px) { /* Una media query más pequeña para la navegación si se quiere que se apilen */
-        .weekly-navigation
-
-    {
-        flex-direction: column;
-    }
-
-    }
-
 
     .current-week-display {
         font-size: 1.2em;
@@ -240,8 +166,7 @@
 
     .week-grid {
         display: grid;
-        /* Esta es la clave: auto-fit y minmax harán que la cuadrícula sea responsiva */
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); /* Min 180px antes de pasar a otra columna */
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 15px;
     }
 
@@ -260,6 +185,7 @@
         text-align: center;
         margin-bottom: 15px;
         color: #007bff;
+        font-weight: bold;
     }
 
     .tasks-list {
@@ -291,6 +217,7 @@
 
     .task-description {
         flex-grow: 1;
+        word-break: break-word;
     }
 
     .delete-task-btn {
@@ -310,9 +237,5 @@
             padding: 8px;
             border: 1px solid #ccc;
             border-radius: 5px;
-        }
-
-        .add-task-form .btn-success {
-            padding: 8px 12px;
         }
 </style>
